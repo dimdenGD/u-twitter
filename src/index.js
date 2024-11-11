@@ -30,11 +30,10 @@ try {
 Application.Router = function(options) {
     const router = new Router(options);
     const fn = function(req, res, next) {
-        router._routeRequest(req, res, 0).then(routed => {
-            if(!routed) {
-                next();
-            }
-        });
+        const routed = router._routeRequest(req, res, 0);
+        if(!routed) {
+            next();
+        }
     };
     Object.assign(fn, router);
     Object.setPrototypeOf(fn, Object.getPrototypeOf(router));

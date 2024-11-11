@@ -180,7 +180,7 @@ class Application extends Router {
         this.uwsApp.any('/*', async (res, req) => {
             const { request, response } = this.handleRequest(res, req);
 
-            const matchedRoute = await this._routeRequest(request, response);
+            const matchedRoute = this._routeRequest(request, response);
             if(!matchedRoute && !response.headersSent && !response.aborted) {
                 response.status(404);
                 this._sendErrorPage(request, response, `Cannot ${request.method} ${request.path}`, false);

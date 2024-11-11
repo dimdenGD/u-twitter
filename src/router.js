@@ -281,7 +281,7 @@ module.exports = class Router extends EventEmitter {
                     request.optimizedParams[route.optimizedParams[i]] = req.getParameter(i);
                 }
             }
-            const matchedRoute = await this._routeRequest(request, response, 0, optimizedPath, true, route);
+            const matchedRoute = this._routeRequest(request, response, 0, optimizedPath, true, route);
             if(!matchedRoute && !response.headersSent && !response.aborted) {
                 response.status(404);
                 request.noEtag = true;
