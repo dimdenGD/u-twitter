@@ -433,7 +433,7 @@ module.exports = class Router extends EventEmitter {
         }
     }
 
-    async _routeRequest(req, res, startIndex = 0, routes = this._routes, skipCheck = false, skipUntil) {
+    _routeRequest(req, res, startIndex = 0, routes = this._routes, skipCheck = false, skipUntil) {
         let routeIndex = skipCheck ? startIndex : findIndexStartingFrom(routes, r => (r.all || r.method === req.method || (r.gettable && req.method === 'HEAD')) && this._pathMatches(r, req), startIndex);
         const route = routes[routeIndex];
         if(!route) {
@@ -449,8 +449,7 @@ module.exports = class Router extends EventEmitter {
         // avoid calling _preprocessRequest as async function as its slower
         // but it seems like calling it as async has unintended consequence of resetting max call stack size
         // so call it as async when the request has been through every 300 routes to reset it
-        const continueRoute = this._paramCallbacks.size === 0 && req.routeCount % 300 !== 0 ? 
-            this._preprocessRequest(req, res, route) : await this._preprocessRequest(req, res, route);
+        const continueRoute = this._preprocessRequest(req, res, route);
         
         if(route.use) {
             const strictRouting = this.get('strict routing');
@@ -470,88 +469,86 @@ module.exports = class Router extends EventEmitter {
                 req.path = '/';
             }
         }
-        return new Promise((resolve) => {
-            const next = async (thingamabob) => {
-                if(thingamabob) {
-                    if(thingamabob === 'route' || thingamabob === 'skipPop') {
-                        if(route.use && thingamabob !== 'skipPop') {
-                            req._stack.pop();
-                            const strictRouting = this.get('strict routing');
-                            req._opPath = req._stack.length > 0 ? req._originalPath.replace(this.getFullMountpath(req), '') : req._originalPath;
-                            if(strictRouting) {
-                                if(req.endsWithSlash && req._opPath[req._opPath.length - 1] !== '/') {
-                                    req._opPath += '/';
-                                }
-                            }
-                            req.url = req._opPath + req.urlQuery;
-                            req.path = req._opPath;
-                            if(req._opPath === '') {
-                                req.url = '/';
-                                req.path = '/';
-                            }
-                            if(!strictRouting && req.endsWithSlash && req._originalPath !== '/' && req._opPath[req._opPath.length - 1] === '/') {
-                                req._opPath = req._opPath.slice(0, -1);
-                            }
-                            if(req.app.parent && route.callback.constructor.name === 'Application') {
-                                req.app = req.app.parent;
+        const next = (thingamabob) => {
+            if(thingamabob) {
+                if(thingamabob === 'route' || thingamabob === 'skipPop') {
+                    if(route.use && thingamabob !== 'skipPop') {
+                        req._stack.pop();
+                        const strictRouting = this.get('strict routing');
+                        req._opPath = req._stack.length > 0 ? req._originalPath.replace(this.getFullMountpath(req), '') : req._originalPath;
+                        if(strictRouting) {
+                            if(req.endsWithSlash && req._opPath[req._opPath.length - 1] !== '/') {
+                                req._opPath += '/';
                             }
                         }
-                        req.routeCount++;
-                        return resolve(this._routeRequest(req, res, routeIndex + 1, routes, skipCheck, skipUntil));
-                    } else {
-                        this._handleError(thingamabob, req, res);
-                        return resolve(true);
+                        req.url = req._opPath + req.urlQuery;
+                        req.path = req._opPath;
+                        if(req._opPath === '') {
+                            req.url = '/';
+                            req.path = '/';
+                        }
+                        if(!strictRouting && req.endsWithSlash && req._originalPath !== '/' && req._opPath[req._opPath.length - 1] === '/') {
+                            req._opPath = req._opPath.slice(0, -1);
+                        }
+                        if(req.app.parent && route.callback.constructor.name === 'Application') {
+                            req.app = req.app.parent;
+                        }
                     }
-                }
-                const callback = route.callbacks[callbackindex++];
-                if(!callback) {
-                    return next('route');
-                }
-                if(callback instanceof Router) {
-                    if(callback.constructor.name === 'Application') {
-                        req.app = callback;
-                    }
-                    if(callback.settings.mergeParams) {
-                        req._paramStack.push(req.params);
-                    }
-                    if(callback.settings['strict routing'] && req.endsWithSlash && req._opPath[req._opPath.length - 1] !== '/') {
-                        req._opPath += '/';
-                    }
-                    const routed = await callback._routeRequest(req, res, 0);
-                    if(routed) return resolve(true);
-                    next();
+                    req.routeCount++;
+                    return this._routeRequest(req, res, routeIndex + 1, routes, skipCheck, skipUntil);
                 } else {
-                    try {
-                        // skipping routes we already went through via optimized path
-                        if(!skipCheck && skipUntil && skipUntil.routeKey >= route.routeKey) {
-                            return next();
-                        }
-                        const out = callback(req, res, next);
-                        if(out instanceof Promise) {
-                            out.catch(err => {
-                                if(this.get("catch async errors")) {
-                                    this._handleError(err, req, res);
-                                    return resolve(true);
-                                } else {
-                                    throw err;
-                                }
-                            });
-                        }
-                    } catch(err) {
-                        this._handleError(err, req, res);
-                        return resolve(true);
-                    }
+                    this._handleError(thingamabob, req, res);
+                    return true;
                 }
             }
-            req.next = next;
-            if(continueRoute === 'route') {
-                next('route');
-            } else if(continueRoute) {
+            const callback = route.callbacks[callbackindex++];
+            if(!callback) {
+                return next('route');
+            }
+            if(callback instanceof Router) {
+                if(callback.constructor.name === 'Application') {
+                    req.app = callback;
+                }
+                if(callback.settings.mergeParams) {
+                    req._paramStack.push(req.params);
+                }
+                if(callback.settings['strict routing'] && req.endsWithSlash && req._opPath[req._opPath.length - 1] !== '/') {
+                    req._opPath += '/';
+                }
+                const routed = callback._routeRequest(req, res, 0);
+                if(routed) return true;
                 next();
             } else {
-                resolve(true);
+                try {
+                    // skipping routes we already went through via optimized path
+                    if(!skipCheck && skipUntil && skipUntil.routeKey >= route.routeKey) {
+                        return next();
+                    }
+                    const out = callback(req, res, next);
+                    if(out instanceof Promise) {
+                        out.catch(err => {
+                            if(this.get("catch async errors")) {
+                                this._handleError(err, req, res);
+                                return true;
+                            } else {
+                                throw err;
+                            }
+                        });
+                    }
+                } catch(err) {
+                    this._handleError(err, req, res);
+                    return true;
+                }
             }
-        });
+        }
+        req.next = next;
+        if(continueRoute === 'route') {
+            next('route');
+        } else if(continueRoute) {
+            next();
+        } else {
+            return true;
+        }
     }
 
     use(path, ...callbacks) {
