@@ -33,7 +33,7 @@ for (const testCategory of testCategories) {
                 }
             }
             let testPath = path.join(__dirname, 'tests', testCategory, testName);
-            let testCode = fs.readFileSync(testPath, 'utf8').replace(`const express = require("../../../src/index.js");`, 'const express = require("express");');
+            let testCode = fs.readFileSync(testPath, 'utf8').replace(`const express = require("../../../src/index.js");`, 'const express = require("express-4");');
             fs.writeFileSync(testPath, testCode);
             let testDescription = testCode.split('\n')[0].slice(2).trim();
             if(testDescription.endsWith('OFF')) {
@@ -49,16 +49,23 @@ for (const testCategory of testCategories) {
                     };
 
                     try {
-                        timeout = setTimeout(() => timeoutFunc('express'), 60000);
-                        let expressOutput = (await exec(`node ${testPath}`)).stdout;
+                        timeout = setTimeout(() => timeoutFunc('express-4'), 60000);
+                        let express4Output = (await exec(`node ${testPath}`)).stdout;
                         clearTimeout(timeout);
 
-                        fs.writeFileSync(testPath, testCode.replace(`const express = require("express");`, `const express = require("../../../src/index.js");`));
+                        fs.writeFileSync(testPath, testCode.replace(`const express = require("express-4");`, `const express = require("../../../src/index.js");`));
                         timeout = setTimeout(() => timeoutFunc('ultimate-express'), 60000)
                         let uExpressOutput = (await exec(`node ${testPath}`)).stdout;
                         clearTimeout(timeout);
+                        assert.strictEqual(uExpressOutput, express4Output);
 
-                        assert.strictEqual(uExpressOutput, expressOutput);
+                        fs.writeFileSync(testPath, testCode.replace(`const express = require("express-4");`, `const express = require("express-5");`));
+                        timeout = setTimeout(() => timeoutFunc('express-5'), 60000)
+                        let express5Output = (await exec(`node ${testPath}`)).stdout;
+                        clearTimeout(timeout);
+                        assert.strictEqual(uExpressOutput, express5Output);
+                        
+                        assert.strictEqual(express4Output, express5Output);
                     } catch (error) {
                         throw error;
                     } finally {
